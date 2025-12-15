@@ -1,91 +1,228 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ru">
 <head>
-  <meta charset="UTF-8" />
-  <title>HTTP Streaming PNG Overlay</title>
-  <style>
-    body { margin: 0; overflow: hidden; background: #111; }
-    canvas { display: block; image-rendering: pixelated; cursor: crosshair; }
-  </style>
+    <meta charset="UTF-8">
+    <style>
+        body {
+            margin: 40px;
+            background: #f0f0f0;
+            font-family: Arial, sans-serif;
+            text-align: center;
+        }
+        h1 {
+            color: #333;
+        }
+        table {
+            border-collapse: collapse;
+            margin: 30px auto;
+            box-shadow: 0 0 20px rgba(0,0,0,0.3);
+        }
+        td {
+            width: 100px;
+            height: 100px;
+            border: none;
+            background: #000000;
+            position: relative;
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+        .loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #888;
+            font-size: 12px;
+            background: rgba(255,255,255,0.8);
+            padding: 5px 10px;
+            border-radius: 5px;
+        }
+        .num {
+            position: absolute;
+            bottom: 4px;
+            right: 4px;
+            background: rgba(0,0,0,0.6);
+            color: white;
+            padding: 2px 6px;
+            font-size: 11px;
+            border-radius: 3px;
+            z-index: 1;
+        }
+    </style>
 </head>
 <body>
-<canvas id="canvas"></canvas>
+
+<table id="grid"></table>
 
 <script>
-const canvas = document.getElementById('canvas');
-const ctx = canvas.getContext('2d', { alpha: false });
-
-const SCALE = 4;
-const WIDTH = 100;
-const HEIGHT = 100;
-
-canvas.width = WIDTH * SCALE;
-canvas.height = HEIGHT * SCALE;
-ctx.imageSmoothingEnabled = false;
-
-const off = document.createElement('canvas');
-off.width = WIDTH;
-off.height = HEIGHT;
-const offCtx = off.getContext('2d', { alpha: false });
-
-async function startStream() {
-  const res = await fetch('/stream');
-  if (!res.body) throw new Error('Streaming not supported');
-
-  const reader = res.body.getReader();
-  let buffer = new Uint8Array(0);
-
-  while (true) {
-    const { value, done } = await reader.read();
-    if (done) break;
-
-    const blob = new Blob([value], { type: 'image/png' });
-    const img = await createImageBitmap(blob);
-    offCtx.drawImage(img, 0, 0, WIDTH, HEIGHT);
-    redraw(activePixel);
-  }
+function cantorPairing(a, b) {
+    a = a >= 0 ? 2 * a : -2 * a - 1;
+    b = b >= 0 ? 2 * b : -2 * b - 1;
+    const s = a + b;
+    return (s * (s + 1)) / 2 + b;
 }
 
-function redraw(highlightPixel = null) {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  ctx.drawImage(off, 0, 0, canvas.width, canvas.height);
+const table = document.getElementById('grid');
+const size = 10;
+const center = Math.floor(size / 2);
 
-  if (highlightPixel) {
-    ctx.strokeStyle = 'rgba(255,0,0,0.9)';
-    ctx.lineWidth = 1;
-    ctx.strokeRect(highlightPixel.x * SCALE, highlightPixel.y * SCALE, SCALE, SCALE);
-  }
+const cells = [];
+for (let row = 0; row < size; row++) {
+    for (let col = 0; col < size; col++) {
+        const x = col - center;
+        const y = row - center;
+        const num = cantorPairing(x, y);
+        cells.push({ row, col, x, y, num });
+    }
 }
 
-let activePixel = null;
+cells.sort((a, b) => a.num - b.num);
 
-canvas.addEventListener('mousemove', e => {
-  const r = canvas.getBoundingClientRect();
-  const x = Math.floor((e.clientX - r.left) / SCALE);
-  const y = Math.floor((e.clientY - r.top) / SCALE);
-  if (x < 0 || y < 0 || x >= WIDTH || y >= HEIGHT) return;
-  activePixel = { x, y };
-  redraw(activePixel);
-});
-
-canvas.addEventListener('mouseleave', () => {
-  activePixel = null;
-  redraw();
-});
-
-canvas.addEventListener('click', () => {
-  if (!activePixel) return;
-  const { x, y } = activePixel;
-  const p = offCtx.getImageData(x, y, 1, 1).data;
-  onPixelClick({ x, y, r: p[0], g: p[1], b: p[2], a: p[3] });
-});
-
-function onPixelClick(info) {
-  alert(JSON.stringify(info))
+for (let i = 0; i < size; i++) {
+    const tr = table.insertRow();
+    for (let j = 0; j < size; j++) {
+        tr.insertCell();
+    }
 }
 
-redraw();
-startStream();
+function findSequence(haystack, needle) {
+    for (let i = 0; i <= haystack.length - needle.length; i++) {
+        let match = true;
+        for (let j = 0; j < needle.length; j++) {
+            if (haystack[i + j] !== needle[j]) {
+                match = false;
+                break;
+            }
+        }
+        if (match) return i;
+    }
+    return -1;
+}
+
+function startDeltaStream(cellInfo) {
+    const { num, row, col } = cellInfo;
+    const td = table.rows[row].cells[col];
+    const canvas = td.querySelector('canvas');
+    if (!canvas) return;
+
+    const streamUrl = `/tile/${num}/stream`;
+
+    fetch(streamUrl)
+        .then(response => {
+            debugger;
+            if (!response.ok) throw new Error('Stream error');
+            const reader = response.body.getReader();
+            let buffer = new Uint8Array(0);
+
+            const processStream = async () => {
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+
+                    let newBuffer = new Uint8Array(buffer.length + value.length);
+                    newBuffer.set(buffer);
+                    newBuffer.set(value, buffer.length);
+                    buffer = newBuffer;
+
+                    while (buffer.length >= 8) {
+                        const pngSignature = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
+                        const startIndex = findSequence(buffer, pngSignature);
+                        if (startIndex === -1) break;
+
+                        buffer = buffer.subarray(startIndex);
+
+                        let pos = 8;
+                        let isComplete = false;
+
+                        while (pos + 12 <= buffer.length) {
+                            const chunkLen = (buffer[pos] << 24) | (buffer[pos + 1] << 16) | (buffer[pos + 2] << 8) | buffer[pos + 3];
+                            const chunkType = String.fromCharCode(buffer[pos + 4], buffer[pos + 5], buffer[pos + 6], buffer[pos + 7]);
+
+                            if (pos + 8 + chunkLen + 4 > buffer.length) break;
+
+                            pos += 8 + chunkLen + 4;
+
+                            if (chunkType === 'IEND') {
+                                isComplete = true;
+                                break;
+                            }
+                        }
+
+                        if (isComplete) {
+                            const pngData = buffer.subarray(0, pos);
+                            const blob = new Blob([pngData], { type: 'image/png' });
+                            const img = new Image();
+                            img.src = URL.createObjectURL(blob);
+                            img.onload = () => {
+                                const ctx = canvas.getContext('2d');
+                                ctx.drawImage(img, 0, 0, 100, 100);
+                            };
+                            buffer = buffer.subarray(pos);
+                        } else {
+                            break;
+                        }
+                    }
+                }
+            };
+
+            processStream().catch(err => console.error('Stream processing error:', err));
+        })
+        .catch(err => console.error('Fetch stream error:', err));
+}
+
+const initialPromises = [];
+
+cells.forEach((cellInfo) => {
+    const { row, col, num } = cellInfo;
+    const td = table.rows[row].cells[col];
+
+    const loading = document.createElement('div');
+    loading.className = 'loading';
+    loading.textContent = 'Loading...';
+    td.appendChild(loading);
+
+    const numDiv = document.createElement('div');
+    numDiv.className = 'num';
+    numDiv.textContent = num;
+    td.appendChild(numDiv);
+
+    const url = `/tile/${num}`;
+
+    const promise = fetch(url)
+        .then(response => response.blob())
+        .then(blob => {
+            td.removeChild(loading);
+            const canvas = document.createElement('canvas');
+            canvas.width = 100;
+            canvas.height = 100;
+            td.appendChild(canvas);
+
+            const img = new Image();
+            img.src = URL.createObjectURL(blob);
+            img.alt = `Image #${num} (x:${cellInfo.x}, y:${cellInfo.y})`;
+            img.onload = () => {
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, 100, 100);
+            };
+        })
+        .catch(err => {
+            td.innerHTML = '<div class="loading">Error</div>';
+            console.error('Error: ', err);
+        });
+
+    initialPromises.push(promise);
+});
+
+Promise.all(initialPromises).then(() => {
+    cells.forEach(cellInfo => {
+        startDeltaStream(cellInfo);
+    });
+}).catch(err => console.error('Initial load error:', err));
+
 </script>
+
 </body>
 </html>
