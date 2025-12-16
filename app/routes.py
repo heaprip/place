@@ -5,14 +5,19 @@ import io
 from aiohttp import web
 from PIL import Image
 
-from canvas import Canvas
-from schemas import CanvasConfig, Pixel, RGBColor
+from app.canvas import Canvas
+from app.schemas import CanvasConfig, Pixel, RGBColor
 
 
 def pillow_img_to_png_bytes(img: Image.Image, format="PNG"):
     with io.BytesIO() as output:
         img.save(output, format=format)
         return output.getvalue()
+
+
+async def get_health_route(req: web.Request):
+    resp = web.Response()
+    return resp
 
 
 async def get_page_route(req):

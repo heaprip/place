@@ -8,8 +8,9 @@ import uvloop
 from aiohttp import web
 from redis import asyncio as aredis
 
-from canvas import Canvas
-from routes import (
+from app.canvas import Canvas
+from app.routes import (
+    get_health_route,
     get_page_route,
     get_tile_delta_stream_route,
     get_tile_route,
@@ -29,10 +30,11 @@ class Config:
     REDIS_DSN: str
 
 
-config = Config(os.environ.get("REDIS_DSN"))
+config = Config(os.environ["REDIS_DSN"])
 
 
 async def redis_startup(app: web.Application):
+    print(config.REDIS_DSN)
     res = aredis.Redis.from_url(config.REDIS_DSN)
     await res.ping()
     app["redis"] = res
@@ -53,19 +55,17 @@ async def canvas_startup(app: web.Application):
 async def canvas_cleanup(app: web.Application): ...
 
 
-if __name__ == "__main__":
-    app = web.Application()
+app = web.Application()
 
-    app.router.add_get("/", get_page_route)
-    app.router.add_post("/new", post_place_canvas_route)
-    app.router.add_post("/pixel", post_pixel_route)
-    app.router.add_get("/tile/{tile}", get_tile_route)
-    app.router.add_get("/tile/{tile}/stream", get_tile_delta_stream_route)
+app.router.add_get("/", get_page_route)
+app.router.add_get("/health", get_health_route)
+app.router.add_post("/new", post_place_canvas_route)
+app.router.add_post("/pixel", post_pixel_route)
+app.router.add_get("/tile/{tile}", get_tile_route)
+app.router.add_get("/tile/{tile}/stream", get_tile_delta_stream_route)
 
-    app.on_startup.append(redis_startup)
-    app.on_startup.append(canvas_startup)
+app.on_startup.append(redis_startup)
+app.on_startup.append(canvas_startup)
 
-    app.on_cleanup.append(redis_cleanup)
-    app.on_cleanup.append(canvas_cleanup)
-
-    web.run_app(app, host="127.0.0.1", port=8080)
+app.on_cleanup.append(redis_cleanup)
+app.on_cleanup.append(canvas_cleanup)

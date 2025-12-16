@@ -1,10 +1,51 @@
 services:
   redis:
     image: docker.io/redis:8.4.0-alpine
+    networks:
+      - backend_net
     ports:
-      - "6376:6379"
+      - "6379"
     volumes:
       - redis-data:/data
+
+  app:
+    build: .
+    deploy:
+      replicas: 3
+      restart_policy:
+        condition: on-failure
+        max_attempts: 3
+    networks:
+      - backend_net
+    expose:
+      - "8080"
+    depends_on:
+      - redis
+    environment:
+      LOG_LEVEL: INFO
+      REDIS_DSN: "redis://redis:6379"
+
+
+  envoy:
+    image: docker.io/envoyproxy/envoy:v1.36-latest
+    volumes:
+      - ./envoy.yaml:/etc/envoy/envoy.yaml
+    ports:
+      - "8080:8080"
+      - "9901:9901"
+    networks:
+      - backend_net
+    depends_on:
+      - app
+    environment:
+      - ENVOY_LOG_LEVEL=TRACE
+      - ENVOY_LOG_FORMAT=text
+      - ENVOY_LOG_PATH=/dev/stdout
+
+
+networks:
+  backend_net:
+    driver: bridge
 
 volumes:
   redis-data:
