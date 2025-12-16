@@ -56,11 +56,11 @@ async def canvas_cleanup(app: web.Application): ...
 if __name__ == "__main__":
     app = web.Application()
 
-    app.router.add_get("/tile/{tile}", get_tile_route)
-    app.router.add_get("/tile/{tile}/stream", get_tile_delta_stream_route)
     app.router.add_get("/", get_page_route)
     app.router.add_post("/new", post_place_canvas_route)
     app.router.add_post("/pixel", post_pixel_route)
+    app.router.add_get("/tile/{tile}", get_tile_route)
+    app.router.add_get("/tile/{tile}/stream", get_tile_delta_stream_route)
 
     app.on_startup.append(redis_startup)
     app.on_startup.append(canvas_startup)

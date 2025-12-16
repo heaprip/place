@@ -41,7 +41,7 @@ async def get_tile_route(req: web.Request):
     # TODO: tile size magic var
 
     img = Image.frombytes(
-        "RGBA", (canvas.tile_width, canvas.tile_height), data=tile_bytes
+        "RGB", (canvas.tile_width, canvas.tile_height), data=tile_bytes
     )
     img_png = pillow_img_to_png_bytes(img)
     await resp.write(img_png)
@@ -63,7 +63,7 @@ async def post_place_canvas_route(req: web.Request):
     # TODO: magic var
     tile_npixels = npixels // (10_000)
 
-    img = Image.new("RGBA", (100, 100))
+    img = Image.new("RGB", (100, 100))
     for ntile in range(tile_npixels):
         await canvas.put_tile(ntile, img.tobytes())
 

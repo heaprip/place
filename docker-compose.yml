@@ -6,6 +6,5 @@ services:
     volumes:
       - redis-data:/data
 
-
 volumes:
   redis-data:

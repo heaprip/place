@@ -36,7 +36,7 @@ class Canvas:
             ):
                 ntiles.add(self.xy_bijection(x, y))
         for ntile in ntiles:
-            img = Image.new("RGBA", (self.tile_width, self.tile_height))
+            img = Image.new("RGB", (self.tile_width, self.tile_height))
             await self.put_tile(ntile, img.tobytes())
 
     def xy_bijection(self, a: int, b: int) -> int:
@@ -57,7 +57,7 @@ class Canvas:
             tile_y = self.tile_height - tile_y
 
         tile = await self.get_tile(ntile)
-        img = Image.frombytes("RGBA", (self.tile_width, self.tile_height), tile)
+        img = Image.frombytes("RGB", (self.tile_width, self.tile_height), tile)
         img.putpixel((tile_x, tile_y), color)
         await self.put_tile(ntile, img.tobytes())
 
@@ -67,15 +67,17 @@ class Canvas:
     async def get_tile(self, ntile: int) -> bytes:
         return await self.red.get(self._tile_key(ntile))
 
-    async def get_cached_tile(self, ntile: int) -> bytes:
+    async def get_previous_ttl_cached_tile(self, ntile: int) -> bytes:
+        return self.previous_cache.get(ntile)
+
+    async def get_ttl_cached_tile(self, ntile: int) -> bytes:
         if ntile in self.current_cache:
             timestamp, result = self.current_cache[ntile]
-            if time.time() - timestamp < self.ttl_seconds:
+            if time.time() - timestamp <= self.ttl_seconds:
                 return result
-            else:
-                del self.current_cache[ntile]
         result = await self.get_tile(ntile)
-        self.previous_cache[ntile] = self.current_cache.get(ntile)
+        _, previous_tile = self.current_cache.get(ntile) or (None, None)
+        self.previous_cache[ntile] = previous_tile
         self.current_cache[ntile] = (time.time(), result)
         return result
 
@@ -93,16 +95,12 @@ class Canvas:
         return delta_img
 
     async def get_tile_delta(self, ntile: int) -> Image.Image:
-        _, current_tile = self.current_cache.get(ntile) or (None, None)
-        if current_tile is None:
-            current_tile = await self.get_tile(ntile)
+        current_tile = await self.get_ttl_cached_tile(ntile)
 
-        _, previous_tile = self.previous_cache.get(ntile) or (None, None)
-        if previous_tile is None:
-            previous_tile = await self.get_cached_tile(ntile)
+        previous_tile = (await self.get_previous_ttl_cached_tile(ntile)) or current_tile
 
         previous_img = Image.frombytes(
-            "P", (self.tile_width, self.tile_height), previous_tile
+            "RGB", (self.tile_width, self.tile_height), previous_tile
         )
-        img = Image.frombytes("P", (self.tile_width, self.tile_height), current_tile)
+        img = Image.frombytes("RGB", (self.tile_width, self.tile_height), current_tile)
         return self._create_delta(previous_img, img)

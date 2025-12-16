@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="ru">
+
 <head>
     <meta charset="UTF-8">
     <style>
@@ -9,14 +10,17 @@
             font-family: Arial, sans-serif;
             text-align: center;
         }
+
         h1 {
             color: #333;
         }
+
         table {
             border-collapse: collapse;
             margin: 30px auto;
-            box-shadow: 0 0 20px rgba(0,0,0,0.3);
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.3);
         }
+
         td {
             width: 100px;
             height: 100px;
@@ -24,11 +28,13 @@
             background: #000000;
             position: relative;
         }
+
         canvas {
             display: block;
             width: 100%;
             height: 100%;
         }
+
         .loading {
             position: absolute;
             top: 50%;
@@ -36,15 +42,16 @@
             transform: translate(-50%, -50%);
             color: #888;
             font-size: 12px;
-            background: rgba(255,255,255,0.8);
+            background: rgba(255, 255, 255, 0.8);
             padding: 5px 10px;
             border-radius: 5px;
         }
+
         .num {
             position: absolute;
             bottom: 4px;
             right: 4px;
-            background: rgba(0,0,0,0.6);
+            background: rgba(0, 0, 0, 0.6);
             color: white;
             padding: 2px 6px;
             font-size: 11px;
@@ -53,82 +60,94 @@
         }
     </style>
 </head>
+
 <body>
 
-<table id="grid"></table>
+    <table id="grid"></table>
 
-<script>
-function cantorPairing(a, b) {
-    a = a >= 0 ? 2 * a : -2 * a - 1;
-    b = b >= 0 ? 2 * b : -2 * b - 1;
-    const s = a + b;
-    return (s * (s + 1)) / 2 + b;
-}
+    <script>
+        function cantorPairing(a, b) {
+            a = a >= 0 ? 2 * a : -2 * a - 1;
+            b = b >= 0 ? 2 * b : -2 * b - 1;
+            const s = a + b;
+            return (s * (s + 1)) / 2 + b;
+        }
 
-const table = document.getElementById('grid');
-const size = 10;
-const center = Math.floor(size / 2);
+        const table = document.getElementById('grid');
+        const size = 10;
+        const center = Math.floor(size / 2);
 
-const cells = [];
-for (let row = 0; row < size; row++) {
-    for (let col = 0; col < size; col++) {
-        const x = col - center;
-        const y = row - center;
-        const num = cantorPairing(x, y);
-        cells.push({ row, col, x, y, num });
-    }
-}
-
-cells.sort((a, b) => a.num - b.num);
-
-for (let i = 0; i < size; i++) {
-    const tr = table.insertRow();
-    for (let j = 0; j < size; j++) {
-        tr.insertCell();
-    }
-}
-
-function findSequence(haystack, needle) {
-    for (let i = 0; i <= haystack.length - needle.length; i++) {
-        let match = true;
-        for (let j = 0; j < needle.length; j++) {
-            if (haystack[i + j] !== needle[j]) {
-                match = false;
-                break;
+        const cells = [];
+        for (let row = 0; row < size; row++) {
+            for (let col = 0; col < size; col++) {
+                const x = col - center;
+                const y = row - center;
+                const num = cantorPairing(x, y);
+                cells.push({ row, col, x, y, num });
             }
         }
-        if (match) return i;
-    }
-    return -1;
-}
 
-function startDeltaStream(cellInfo) {
-    const { num, row, col } = cellInfo;
-    const td = table.rows[row].cells[col];
-    const canvas = td.querySelector('canvas');
-    if (!canvas) return;
+        cells.sort((a, b) => a.num - b.num);
 
-    const streamUrl = `/tile/${num}/stream`;
+        for (let i = 0; i < size; i++) {
+            const tr = table.insertRow();
+            for (let j = 0; j < size; j++) {
+                tr.insertCell();
+            }
+        }
 
-    fetch(streamUrl)
-        .then(response => {
-            debugger;
-            if (!response.ok) throw new Error('Stream error');
+        function findSequence(haystack, needle) {
+            for (let i = 0; i <= haystack.length - needle.length; i++) {
+                let match = true;
+                for (let j = 0; j < needle.length; j++) {
+                    if (haystack[i + j] !== needle[j]) {
+                        match = false;
+                        break;
+                    }
+                }
+                if (match) return i;
+            }
+            return -1;
+        }
+
+        async function startDeltaStream(cellInfo) {
+            const { num, row, col } = cellInfo;
+            const td = table.rows[row].cells[col];
+            const canvas = td.querySelector('canvas');
+            if (!canvas) return;
+
+            const streamUrl = `/tile/${num}/stream`;
+
+            let response;
+            try {
+                response = await fetch(streamUrl);
+                if (!response.ok) {
+                    throw new Error('Stream error');
+                }
+            } catch (err) {
+                console.error('Fetch stream error:', err);
+                return;
+            }
+
             const reader = response.body.getReader();
             let buffer = new Uint8Array(0);
 
-            const processStream = async () => {
+            try {
                 while (true) {
                     const { done, value } = await reader.read();
                     if (done) break;
 
-                    let newBuffer = new Uint8Array(buffer.length + value.length);
+                    const newBuffer = new Uint8Array(buffer.length + value.length);
                     newBuffer.set(buffer);
                     newBuffer.set(value, buffer.length);
                     buffer = newBuffer;
 
                     while (buffer.length >= 8) {
-                        const pngSignature = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
+                        const pngSignature = [
+                            0x89, 0x50, 0x4E, 0x47,
+                            0x0D, 0x0A, 0x1A, 0x0A
+                        ];
+
                         const startIndex = findSequence(buffer, pngSignature);
                         if (startIndex === -1) break;
 
@@ -138,8 +157,18 @@ function startDeltaStream(cellInfo) {
                         let isComplete = false;
 
                         while (pos + 12 <= buffer.length) {
-                            const chunkLen = (buffer[pos] << 24) | (buffer[pos + 1] << 16) | (buffer[pos + 2] << 8) | buffer[pos + 3];
-                            const chunkType = String.fromCharCode(buffer[pos + 4], buffer[pos + 5], buffer[pos + 6], buffer[pos + 7]);
+                            const chunkLen =
+                                (buffer[pos] << 24) |
+                                (buffer[pos + 1] << 16) |
+                                (buffer[pos + 2] << 8) |
+                                buffer[pos + 3];
+
+                            const chunkType = String.fromCharCode(
+                                buffer[pos + 4],
+                                buffer[pos + 5],
+                                buffer[pos + 6],
+                                buffer[pos + 7]
+                            );
 
                             if (pos + 8 + chunkLen + 4 > buffer.length) break;
 
@@ -151,78 +180,84 @@ function startDeltaStream(cellInfo) {
                             }
                         }
 
-                        if (isComplete) {
-                            const pngData = buffer.subarray(0, pos);
-                            const blob = new Blob([pngData], { type: 'image/png' });
-                            const img = new Image();
-                            img.src = URL.createObjectURL(blob);
-                            img.onload = () => {
-                                const ctx = canvas.getContext('2d');
-                                ctx.drawImage(img, 0, 0, 100, 100);
-                            };
-                            buffer = buffer.subarray(pos);
-                        } else {
-                            break;
-                        }
+                        if (!isComplete) break;
+
+                        const pngData = buffer.subarray(0, pos);
+                        buffer = buffer.subarray(pos);
+
+                        const blob = new Blob([pngData], { type: 'image/png' });
+                        const img = new Image();
+                        img.src = URL.createObjectURL(blob);
+
+                        img.onload = () => {
+                            const ctx = canvas.getContext('2d');
+                            ctx.drawImage(img, 0, 0, 100, 100);
+                            URL.revokeObjectURL(img.src);
+                        };
                     }
                 }
-            };
+            } catch (err) {
+                console.error('Stream processing error:', err);
+            }
+        }
 
-            processStream().catch(err => console.error('Stream processing error:', err));
-        })
-        .catch(err => console.error('Fetch stream error:', err));
-}
+        const initialPromises = [];
 
-const initialPromises = [];
+        cells.forEach((cellInfo) => {
+            const { row, col, num } = cellInfo;
+            const td = table.rows[row].cells[col];
 
-cells.forEach((cellInfo) => {
-    const { row, col, num } = cellInfo;
-    const td = table.rows[row].cells[col];
+            const loading = document.createElement('div');
+            loading.className = 'loading';
+            loading.textContent = 'Loading...';
+            td.appendChild(loading);
 
-    const loading = document.createElement('div');
-    loading.className = 'loading';
-    loading.textContent = 'Loading...';
-    td.appendChild(loading);
+            const numDiv = document.createElement('div');
+            numDiv.className = 'num';
+            numDiv.textContent = num;
+            td.appendChild(numDiv);
 
-    const numDiv = document.createElement('div');
-    numDiv.className = 'num';
-    numDiv.textContent = num;
-    td.appendChild(numDiv);
+            const url = `/tile/${num}`;
 
-    const url = `/tile/${num}`;
+            const promise = fetch(url)
+                .then(response => response.blob())
+                .then(blob => {
+                    td.removeChild(loading);
+                    const canvas = document.createElement('canvas');
+                    canvas.width = 100;
+                    canvas.height = 100;
+                    td.appendChild(canvas);
 
-    const promise = fetch(url)
-        .then(response => response.blob())
-        .then(blob => {
-            td.removeChild(loading);
-            const canvas = document.createElement('canvas');
-            canvas.width = 100;
-            canvas.height = 100;
-            td.appendChild(canvas);
+                    const img = new Image();
+                    img.src = URL.createObjectURL(blob);
+                    img.alt = `Image #${num} (x:${cellInfo.x}, y:${cellInfo.y})`;
+                    img.onload = () => {
+                        const ctx = canvas.getContext('2d');
+                        ctx.drawImage(img, 0, 0, 100, 100);
+                    };
+                })
+                .catch(err => {
+                    td.innerHTML = '<div class="loading">Error</div>';
+                    console.error('Error: ', err);
+                });
 
-            const img = new Image();
-            img.src = URL.createObjectURL(blob);
-            img.alt = `Image #${num} (x:${cellInfo.x}, y:${cellInfo.y})`;
-            img.onload = () => {
-                const ctx = canvas.getContext('2d');
-                ctx.drawImage(img, 0, 0, 100, 100);
-            };
-        })
-        .catch(err => {
-            td.innerHTML = '<div class="loading">Error</div>';
-            console.error('Error: ', err);
+            initialPromises.push(promise);
         });
 
-    initialPromises.push(promise);
-});
+        Promise.all(initialPromises).then(() => {
+            cells.forEach(cellInfo => {
+                startDeltaStream(cellInfo);
+            });
+        }).catch(err => console.error('Initial load error:', err));
 
-Promise.all(initialPromises).then(() => {
-    cells.forEach(cellInfo => {
-        startDeltaStream(cellInfo);
-    });
-}).catch(err => console.error('Initial load error:', err));
 
-</script>
+        Promise.all(initialPromises)
+            .then(() => Promise.all(cells.map(startDeltaStream)))
+            .catch(err => console.error('Initial load error:', err));
+
+
+    </script>
 
 </body>
+
 </html>
