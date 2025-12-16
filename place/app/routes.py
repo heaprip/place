@@ -3,10 +3,9 @@ import datetime
 import io
 
 from aiohttp import web
-from PIL import Image
-
 from app.canvas import Canvas
 from app.schemas import CanvasConfig, Pixel, RGBColor
+from PIL import Image
 
 
 def pillow_img_to_png_bytes(img: Image.Image, format="PNG"):

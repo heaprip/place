@@ -9,9 +9,11 @@ services:
       - redis-data:/data
 
   app:
-    build: .
+    build:
+      context: .
+      dockerfile: place.dockerfile
     deploy:
-      replicas: 3
+      replicas: 1
       restart_policy:
         condition: on-failure
         max_attempts: 3
@@ -37,10 +39,6 @@ services:
       - backend_net
     depends_on:
       - app
-    environment:
-      - ENVOY_LOG_LEVEL=TRACE
-      - ENVOY_LOG_FORMAT=text
-      - ENVOY_LOG_PATH=/dev/stdout
 
 
 networks:

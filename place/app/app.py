@@ -6,8 +6,6 @@ import attrs
 import dotenv
 import uvloop
 from aiohttp import web
-from redis import asyncio as aredis
-
 from app.canvas import Canvas
 from app.routes import (
     get_health_route,
@@ -17,6 +15,7 @@ from app.routes import (
     post_pixel_route,
     post_place_canvas_route,
 )
+from redis import asyncio as aredis
 
 asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
 
